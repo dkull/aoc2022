@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+type Player struct {
+	valve    Valve
+	distance int
+}
+
 func Fatal(err error) {
 	if err != nil {
 		panic(err)
@@ -70,6 +75,13 @@ func containsLink(links []Link, link Link) bool {
 		}
 	}
 	return false
+}
+
+func Max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 /*
@@ -277,6 +289,95 @@ func calculateFlowRate(valves map[string]Valve, linkmap map[string]map[string]in
 	return currentValveScore + bestScore, append([]string{currentValve.name}, bestRoute...)
 }
 
+func calculateFlowRate2(valves map[string]Valve, linkmap map[string]map[string]int, opened []string, minutesLeft int, players []Player) (int, string, string) {
+	// If we have no minutes left, return 0
+	if minutesLeft < 0 {
+		return 0, "", ""
+	}
+
+	bestP1route := ""
+	bestP2route := ""
+	if players[0].distance > -1 && players[1].distance > -1 {
+		players[0].distance -= 1
+		players[1].distance -= 1
+		score, p1r, p2r := calculateFlowRate2(valves, linkmap, opened, minutesLeft-1, players)
+		return score, p1r, p2r
+	}
+	if players[0].distance == -1 && players[1].distance == -1 {
+		bestScore := 0
+		currentScore := 0
+		currentScore += players[0].valve.rate * minutesLeft
+		currentScore += players[1].valve.rate * minutesLeft
+		// both are done
+		for _, valve1 := range valves {
+			if ArrContains(opened, valve1.name) {
+				continue
+			}
+			for _, valve2 := range valves {
+				if ArrContains(opened, valve2.name) {
+					continue
+				}
+				if valve1.name == valve2.name {
+					continue
+				}
+				p1 := Player{valve1, linkmap[players[0].valve.name][valve1.name] - 1}
+				p2 := Player{valve2, linkmap[players[1].valve.name][valve2.name] - 1}
+				newopened := append(opened[:], p1.valve.name)
+				newopened = append(newopened, p2.valve.name)
+				score, p1r, p2r := calculateFlowRate2(valves, linkmap, newopened, minutesLeft-1, []Player{p1, p2})
+				if score > bestScore {
+					bestScore = score
+					bestP1route = p1.valve.name + "," + p1r
+					bestP2route = p2.valve.name + "," + p2r
+				}
+			}
+		}
+		return currentScore + bestScore, bestP1route, bestP2route
+	}
+	if players[0].distance == -1 {
+		bestScore := 0
+		currentScore := players[0].valve.rate * minutesLeft
+		// player 1 is done
+		for _, valve := range valves {
+			if ArrContains(opened, valve.name) {
+				continue
+			}
+			p1 := Player{valve, linkmap[players[0].valve.name][valve.name] - 1}
+			p2 := Player{players[1].valve, players[1].distance - 1}
+			newopened := append(opened[:], p1.valve.name)
+			score, p1r, p2r := calculateFlowRate2(valves, linkmap, newopened, minutesLeft-1, []Player{p1, p2})
+			if score > bestScore {
+				bestScore = score
+				bestP1route = p1.valve.name + "," + p1r
+				bestP2route = p2.valve.name + "," + p2r
+			}
+		}
+		return currentScore + bestScore, bestP1route, bestP2route
+	}
+	if players[1].distance == -1 {
+		bestScore := 0
+		currentScore := players[1].valve.rate * minutesLeft
+		// player 2 is done
+		for _, valve := range valves {
+			if ArrContains(opened, valve.name) {
+				continue
+			}
+			p1 := Player{players[0].valve, players[0].distance - 1}
+			p2 := Player{valve, linkmap[players[1].valve.name][valve.name] - 1}
+			newopened := append(opened[:], p2.valve.name)
+			score, p1r, p2r := calculateFlowRate2(valves, linkmap, newopened, minutesLeft-1, []Player{p1, p2})
+			if score > bestScore {
+				bestScore = score
+				bestP1route = p1.valve.name + "," + p1r
+				bestP2route = p2.valve.name + "," + p2r
+			}
+		}
+		return currentScore + bestScore, bestP1route, bestP2route
+	}
+	panicmsg := fmt.Sprintf("players[0].distance: %d, players[1].distance: %d", players[0].distance, players[1].distance)
+	panic(panicmsg)
+}
+
 /*
 read a file using os.ReadFile from Args[1]. parse the file into Valve structs. for each valve,
 calculate the maximum flow rate we can achieve by turning the valve. print the maximum flow rate
@@ -312,6 +413,10 @@ func main() {
 	links = pruneDuplicateLinks(valves, links)
 	fmt.Println("pruning duplicate links (after pruning)", len(links))
 
+	for valve := range valves {
+		fmt.Println("valve:", valve, "rate:", valves[valve].rate)
+	}
+
 	// create a distance mapping between all Valves, this gives
 	// as the simplest possible way to move from one valve to another
 	distanceMap := make(map[string]map[string]int)
@@ -335,6 +440,11 @@ func main() {
 	bestFlowRate, bestRoute := calculateFlowRate(valves, distanceMap, opened, 31, atValve)
 	fmt.Println("Part1:", bestFlowRate, bestRoute)
 
-	bestFlowRate, bestRoute = calculateFlowRate(valves, distanceMap, opened, 10, atValve)
-	fmt.Println("Part2:", bestFlowRate, bestRoute)
+	p1 := Player{valves["AA"], -1}
+	p2 := Player{valves["AA"], -1}
+	opened = append(opened, "AA")
+	bestFlowRate, p1r, p2r := calculateFlowRate2(valves, distanceMap, opened, 26, []Player{p1, p2})
+	fmt.Println("Part2:", bestFlowRate)
+	fmt.Println("p1:", p1r)
+	fmt.Println("p2:", p2r)
 }
