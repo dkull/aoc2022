@@ -244,7 +244,7 @@ other valves to get to the target valve. each move costs 1 minute, and each valv
 we cannot exceed minutesLeft. we need to use the shortest path when moving to target valve.
 return the valves from rate multiplied by the minutes we have left after reaching the target valve.
 */
-func calculateFlowRate(valves map[string]Valve, linkmap map[string]map[string]int, opened []string, minutesLeft int, currentValve Valve, players int) (int, []string) {
+func calculateFlowRate(valves map[string]Valve, linkmap map[string]map[string]int, opened []string, minutesLeft int, currentValve Valve) (int, []string) {
 	// If we have no minutes left, return 0
 	if minutesLeft <= 0 {
 		return 0, []string{}
@@ -258,21 +258,19 @@ func calculateFlowRate(valves map[string]Valve, linkmap map[string]map[string]in
 	bestScore := 0
 	bestRoute := []string{}
 	valvePaths := linkmap[currentValve.name]
-	for neighborValveName1, distance1 := range valvePaths {
-		for neighborValveName2, distance2 := range valvePaths {
-			// if we have already opened this valve, skip it
-			if ArrContains(opened, neighborValveName1) || ArrContains(opened, neighborValveName2) {
-				continue
-			}
-			// if we have no minutes left to reach the neighbor and turn it, skip it
-			if minutesLeft < distance+1 {
-				continue
-			}
-			score, route := calculateFlowRate(valves, linkmap, opened, minutesLeft-distance, valves[neighborValveName], players)
-			if score > bestScore {
-				bestScore = score
-				bestRoute = route
-			}
+	for neighborValveName, distance := range valvePaths {
+		// if we have already opened this valve, skip it
+		if ArrContains(opened, neighborValveName) {
+			continue
+		}
+		// if we have no minutes left to reach the neighbor and turn it, skip it
+		if minutesLeft < distance+1 {
+			continue
+		}
+		score, route := calculateFlowRate(valves, linkmap, opened, minutesLeft-distance, valves[neighborValveName])
+		if score > bestScore {
+			bestScore = score
+			bestRoute = route
 		}
 	}
 
@@ -335,8 +333,8 @@ func main() {
 	opened := []string{}
 	atValve := valves["AA"]
 	bestFlowRate, bestRoute := calculateFlowRate(valves, distanceMap, opened, 31, atValve)
-	fmt.Println("Part1:", bestFlowRate, bestRoute, 1)
+	fmt.Println("Part1:", bestFlowRate, bestRoute)
 
-	bestFlowRate, bestRoute = calculateFlowRate(valves, distanceMap, opened, 15, atValve)
-	fmt.Println("Part2:", bestFlowRate, bestRoute, 2)
+	bestFlowRate, bestRoute = calculateFlowRate(valves, distanceMap, opened, 10, atValve)
+	fmt.Println("Part2:", bestFlowRate, bestRoute)
 }
