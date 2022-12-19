@@ -175,7 +175,7 @@ func (a *Area) Print(highestRow int) {
 /*
 find the new highest block in the area
 */
-func (a *Area) updateHighestBlock() {
+/*func (a *Area) updateHighestBlock() {
 	for i, row := range a.b {
 		hasNone := true
 		for _, col := range row {
@@ -189,7 +189,7 @@ func (a *Area) updateHighestBlock() {
 			break
 		}
 	}
-}
+}*/
 
 /*
 given a shape, choose the bottom left corner as the anchor point.
@@ -227,9 +227,29 @@ func (a *Area) FreezeFalling() {
 		row := falling.y
 		col := falling.x
 		a.b[row][col] = '#'
+		a.highestBlock = Max(a.highestBlock, row)
 	}
 	a.falling = make([]Point, 0)
-	a.updateHighestBlock()
+	//a.Expand()
+}
+
+/*
+prepend 100000 rows to a.b if we have less than 10 rows available above highestBlock
+*/
+func (a *Area) Expand() {
+	if a.highestBlock > len(a.b)-10 {
+		fmt.Println("Expanding")
+		newB := make([][]byte, 100000)
+		for i := range newB {
+			newB[i] = make([]byte, len(a.b[0]))
+			// fill b[i] with '.' runes
+			for j := range newB[i] {
+				newB[i][j] = '\x00'
+			}
+		}
+		a.b = append(newB, a.b...)
+		//a.highestBlock += 100000
+	}
 }
 
 /*
@@ -277,40 +297,9 @@ func (a *Area) MoveFalling(dir rune) bool {
 	return true
 }
 
-/*
-find repeating patterns from highest to lowest row
-try all pattern lengths, 2..x
-*/
-func (a *Area) FindPattern(freshRows int) (int, int) {
-	//fmt.Println("finding pattern: ", a.highestBlock, a.b[a.highestBlock], "to", checkedRow, a.b[checkedRow])
-	middleIdx := a.highestBlock / 2
-	//fmt.Println("finding")
-
-	ptrs := [3]int{0, 0, 0}
-	for patternLen := Min(50, a.highestBlock/100); patternLen < a.highestBlock/4; patternLen++ {
-		if (middleIdx-patternLen*2)-patternLen < 0 {
-			continue
-		}
-		ptrs = [3]int{middleIdx, middleIdx - patternLen, middleIdx - (patternLen * 2)}
-		nomatch := false
-		for patidx := 0; patidx < patternLen; patidx++ {
-			if !(SlicesEqual(a.b[ptrs[0]], a.b[ptrs[1]]) && SlicesEqual(a.b[ptrs[1]], a.b[ptrs[2]])) {
-				nomatch = true
-				break
-			}
-			//fmt.Println("found match", ptrs[0], ptrs[1], ptrs[2], "of length", patternLen)
-		}
-		if !nomatch {
-			return ptrs[0], patternLen
-		}
-	}
-
-	return 0, 0
-}
-
 func (a *Area) FindPattern2() ([][]byte, int) {
 	for row := a.highestBlock; row >= 0; row-- {
-		for patternLen := 10; patternLen < 100; patternLen++ {
+		for patternLen := 10; patternLen < Min(10000, a.highestBlock); patternLen++ {
 			equal := MultiSlicesEqual(a.b[row:row+patternLen], a.b[row+patternLen:row+(patternLen*2)])
 			equal = equal && MultiSlicesEqual(a.b[row+patternLen:row+(patternLen*2)], a.b[row+(patternLen*2):row+(patternLen*3)])
 			if equal {
@@ -330,7 +319,7 @@ type RepeatMatcher struct {
 
 func play(area Area, shapeGen Generator[Shape], gasGen Generator[rune], maxblocks int64) int64 {
 	simulatedHeight := 0
-	findPatterns := true
+	var trackingGenerators *Pair[int]
 	var matchCollection map[RepeatMatcher]int = make(map[RepeatMatcher]int)
 	for blockidx := int64(0); blockidx < maxblocks; blockidx++ {
 		shape := shapeGen.Next()
@@ -344,24 +333,35 @@ func play(area Area, shapeGen Generator[Shape], gasGen Generator[rune], maxblock
 				break
 			}
 		}
-		// part 2
-		if blockidx%100 == 0 {
-			fmt.Println("(", maxblocks, ")", "blockidx: ", blockidx)
-		}
-		// count the shapes for each pattern
-		/*for _, v := range matchCollection {
-			v += 1
-		}*/
 
-		var matchMismatch, matchLength = area.FindPattern2()
-		if matchLength > 0 && findPatterns {
+		// part 2
+		var matchMismatch [][]byte = nil
+		var matchLength = 0
+		generators := Pair[int]{shapeGen.next, gasGen.next}
+
+		if trackingGenerators == nil {
+			if blockidx%10000 == 0 {
+				matchMismatch, matchLength = area.FindPattern2()
+			}
+		} else {
+			if generators == *trackingGenerators {
+				matchMismatch, matchLength = area.FindPattern2()
+			}
+		}
+
+		if matchLength > 0 {
 			//fmt.Println("found match", matchMismatch, matchLength)
 			rm := RepeatMatcher{rowOffset: len(matchMismatch), patternLen: matchLength, shapeGenIdx: shapeGen.next, gasGenIdx: gasGen.next}
+			trackingGenerators = &Pair[int]{shapeGen.next, gasGen.next}
+			fmt.Println("found pattern!", rm, "now tracking", trackingGenerators)
 			if _, ok := matchCollection[rm]; !ok {
 				matchCollection[rm] = int(blockidx)
 				continue
 			}
+		}
 
+		if trackingGenerators != nil && generators == *trackingGenerators {
+			rm := RepeatMatcher{rowOffset: len(matchMismatch), patternLen: matchLength, shapeGenIdx: shapeGen.next, gasGenIdx: gasGen.next}
 			fmt.Println("found match again: ", rm)
 			canAddShapes := int(blockidx) - matchCollection[rm]
 			canAddHeight := rm.patternLen
@@ -372,9 +372,7 @@ func play(area Area, shapeGen Generator[Shape], gasGen Generator[rune], maxblock
 				simulatedHeight += canAddHeight
 				iterations++
 			}
-			findPatterns = false
-			fmt.Println("now at block", blockidx, "after", iterations, "iterations")
-			fmt.Println("simualted: height", simulatedHeight, "sim+highest:", simulatedHeight+area.highestBlock)
+			fmt.Println("now at block", blockidx, "after", iterations, "iterations", simulatedHeight, "simulated height")
 		}
 	}
 	return int64(area.highestBlock+1) + int64(simulatedHeight)
@@ -399,7 +397,7 @@ func main() {
 
 	shapeMachine = Generator[Shape]{0, Shapes}
 	gasMachine = Generator[rune]{0, []rune(string(gasPattern))}
-	area = NewArea(7, 1000000)
+	area = NewArea(7, 10000000)
 	p2Result := play(area, shapeMachine, gasMachine, int64(1000000000000))
 	fmt.Printf("p2: %d\n", p2Result)
 }
