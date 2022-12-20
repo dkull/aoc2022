@@ -109,18 +109,7 @@ func run[T Num](rb RingBuffer[T], mixtimes int) T {
 		for elemIdx := T(0); elemIdx < rb.insertIdxs; elemIdx++ {
 			// find the element in the RingBuffer
 			rb.FindInsertIdx(elemIdx)
-			/*fmt.Println("moving:", rb.numbers[rb.index].value)
-			fmt.Print("Before: ")
-			for _, elem := range rb.numbers {
-				fmt.Print(elem.value, " ")
-			}
-			fmt.Println()*/
 			rb.ShuffleValue()
-			/*fmt.Print(" After: ")
-			for _, elem := range rb.numbers {
-				fmt.Print(elem.value, " ")
-			}
-			fmt.Println()*/
 		}
 	}
 	// the answer
