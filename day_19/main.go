@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+type Pair[T any, U any] struct {
+	first  T
+	second U
+}
+
 func Max(a, b int) int {
 	if a > b {
 		return a
@@ -185,47 +190,56 @@ func simulate(recipe Recipe, gs GameState, minute int, maxminute int) (totalGeod
 		highestGeodes = gs.geode
 		//fmt.Println("minute:", minute, "geodes:", gs.geode, "highestGeodes:", highestGeodes)
 	} else {
+		// how many we could magically make
 		bestCaseGeodes := gs.geode
 		bestCaseMiners := gs.geodeRobots
-		for i := minute; i <= maxminute; i++ {
+		for i := minute + 1; i <= maxminute; i++ {
 			bestCaseGeodes += bestCaseMiners
 			bestCaseMiners += 1
 		}
 		if bestCaseGeodes < highestGeodes {
 			return 0
 		}
+		// do i have obsidian to build a geode robot?
+		/*
+			if gs.geode+(gs.geodeRobots*maxminute-minute) < highestGeodes {
+				// no, we can't win with our current geode robots
+				// check if we build a new obsidian robot every turn, could we win?
+				obsidian := gs.obsidian
+				obsidianRobots := gs.obsidianRobots
+				for i := minute + 1; i <= maxminute; i++ {
+					obsidian += obsidianRobots
+					obsidianRobots += 1
+				}
+				if obsidian < recipe.GeodeRobot.obsidianCost {
+					// no, we can't win
+					return 0
+				}
+			}*/
 	}
 
 	// if any robots are in production, we skip the production step
 	notProducing := !(gs.oreRobotsInProduction > 0 || gs.clayRobotsInProduction > 0 || gs.obsidianRobotsInProduction > 0 || gs.geodeRobotsInProduction > 0)
 
 	bestBranchResult := 0
-	if notProducing {
+	if notProducing && maxminute-minute >= 1 {
 		if newState := gs.BuyGeodeRobot(recipe); newState != nil {
-			//fmt.Printf("%d Geode: %+v\n", minute, newState)
-			geodeCount := simulate(recipe, *newState, minute, maxminute)
-			if geodeCount > bestBranchResult {
+			if geodeCount := simulate(recipe, *newState, minute, maxminute); geodeCount > bestBranchResult {
 				bestBranchResult = geodeCount
 			}
 		}
 		if newState := gs.BuyObsidianRobot(recipe); newState != nil {
-			//fmt.Printf("%d Obsidian: %+v\n", minute, newState)
-			geodeCount := simulate(recipe, *newState, minute, maxminute)
-			if geodeCount > bestBranchResult {
+			if geodeCount := simulate(recipe, *newState, minute, maxminute); geodeCount > bestBranchResult {
 				bestBranchResult = geodeCount
 			}
 		}
 		if newState := gs.BuyClayRobot(recipe); newState != nil {
-			//fmt.Printf("%d Clay: %+v\n", minute, newState)
-			geodeCount := simulate(recipe, *newState, minute, maxminute)
-			if geodeCount > bestBranchResult {
+			if geodeCount := simulate(recipe, *newState, minute, maxminute); geodeCount > bestBranchResult {
 				bestBranchResult = geodeCount
 			}
 		}
 		if newState := gs.BuyOreRobot(recipe); newState != nil {
-			//fmt.Printf("%d Ore: %+v\n", minute, newState)
-			geodeCount := simulate(recipe, *newState, minute, maxminute)
-			if geodeCount > bestBranchResult {
+			if geodeCount := simulate(recipe, *newState, minute, maxminute); geodeCount > bestBranchResult {
 				bestBranchResult = geodeCount
 			}
 		}
@@ -278,5 +292,22 @@ func main() {
 		qualityLvl := result * recipe.Id
 		qualityLvlSum += qualityLvl
 		fmt.Println("blueprint", recipe.Id, "result:", result, "new quality lvl:", qualityLvl, "total quality lvl:", qualityLvlSum)
+	}
+
+	for _, recipe := range recipes {
+		highestGeodes = 1
+		gamestate := GameState{
+			ore:            0,
+			clay:           0,
+			obsidian:       0,
+			geode:          0,
+			oreRobots:      1,
+			clayRobots:     0,
+			obsidianRobots: 0,
+			geodeRobots:    0,
+		}
+		result := simulate(recipe, gamestate, 1, 32)
+		highestGeodes *= result
+		fmt.Println("blueprint", recipe.Id, "result:", result)
 	}
 }
