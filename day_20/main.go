@@ -21,13 +21,6 @@ func Fatal(err error) {
 	}
 }
 
-func Abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 func Modulus[T Num](a, b T) T {
 	// return the modulus of a and b
 	return ((a % b) + b) % b
