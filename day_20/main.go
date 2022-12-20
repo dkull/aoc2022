@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 /*
@@ -133,11 +134,15 @@ func main() {
 		// add the number to the RingBuffer
 		rb.Add(int64(num))
 	}
+
+	now := time.Now()
 	fmt.Println("Part 1:", run(rb, 1))
+	fmt.Println("Took", time.Since(now).Round(time.Millisecond))
 
 	for idx := range rb.numbers {
 		rb.numbers[idx].value = int64(rb.numbers[idx].value * 811589153)
 	}
+	now = time.Now()
 	fmt.Println("Part 2:", run(rb, 10))
-
+	fmt.Println("Took", time.Since(now).Round(time.Millisecond))
 }
