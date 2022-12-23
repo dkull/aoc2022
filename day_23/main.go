@@ -100,11 +100,11 @@ dirLoop:
 		// then we can't move there
 		for _, lookPoint := range lookPoints {
 			if _, ok := otherElves[lookPoint]; ok {
-				fmt.Println("elf", e.Name, "can't move", e.Directions[dirIdx], "because of elf at", lookPoint)
+				//fmt.Println("elf", e.Name, "can't move", e.Directions[dirIdx], "because of elf at", lookPoint)
 				continue dirLoop
 			}
 		}
-		fmt.Println("elf", e.Name, "can move", e.Directions[dirIdx])
+		//fmt.Println("elf", e.Name, "can move", e.Directions[dirIdx])
 		// the first one consideredd is move to lat
 		result = &lookPoints[1]
 		break
@@ -225,9 +225,10 @@ func CalcScore(elves []Elf) int {
 	return score
 }
 
-func Part1(elves []Elf) int {
-	for round := 1; round <= 10; round++ {
-		fmt.Println("\n==== Round", round, "====\n")
+func Task(elves []Elf) (int, int) {
+	elvesAtRound10 := 0
+	for round := 1; ; round++ {
+		//fmt.Println("\n==== Round", round, "====\n")
 		elfAt := map[Point]*Elf{}
 		for i := range elves {
 			elf := &elves[i]
@@ -242,11 +243,11 @@ func Part1(elves []Elf) int {
 			// we always need to rotate the direction
 			proposedMove := elf.ProposeMove(elfAt)
 			if !haveNeighbor {
-				fmt.Println("Elf", elf.Name, "has no neighbor")
+				//fmt.Println("Elf", elf.Name, "has no neighbor")
 				continue
 			}
 			if proposedMove == nil {
-				fmt.Println("Elf", elf.Name, "has no proposed move")
+				//fmt.Println("Elf", elf.Name, "has no proposed move")
 				continue
 			}
 
@@ -261,7 +262,7 @@ func Part1(elves []Elf) int {
 		// only do moves to points where only 1 elf is going
 		for point, elfList := range proposedMoves {
 			if len(elfList) == 1 {
-				fmt.Println("Elf", elfList[0].Position, "moves to", point)
+				//fmt.Println("Elf", elfList[0].Position, "moves to", point)
 				elfList[0].Position = point
 			}
 		}
@@ -271,11 +272,15 @@ func Part1(elves []Elf) int {
 			elf := &elves[i]
 			elfAt[elf.Position] = elf
 		}
-		DrawMap(elfAt)
+		//DrawMap(elfAt)
 		// END map drawing
-
+		if round == 10 {
+			elvesAtRound10 = CalcScore(elves)
+		}
+		if len(proposedMoves) == 0 {
+			return elvesAtRound10, round
+		}
 	}
-	return CalcScore(elves)
 }
 
 /*
@@ -285,8 +290,7 @@ func main() {
 	data, err := os.ReadFile(os.Args[1])
 	Fatal(err)
 	_, elves := ParseMap(string(data))
-	for elfIdx, elf := range elves {
-		fmt.Printf("Elf %d: %v\n", elfIdx, elf)
-	}
-	fmt.Println("Part 1:", Part1(elves))
+	part1, part2 := Task(elves)
+	fmt.Println("Part 1:", part1)
+	fmt.Println("Part 2:", part2)
 }
