@@ -18,13 +18,36 @@ func Fatal(err error) {
 	}
 }
 
+func Abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
 /*
 Datastructures
 */
 
+type Pos struct {
+	X int
+	Y int
+}
+
+func (p *Pos) ManhattanDistance(other Pos) int {
+	return Abs(p.X-other.X) + Abs(p.Y-other.Y)
+}
+
 type Vector struct {
 	X int
 	Y int
+}
+
+type Rule struct {
+	FromCubeIdx int
+	EntryFacing int
+	ToCubeIdx   int
+	ExitFacing  int
 }
 
 type Player struct {
@@ -34,6 +57,12 @@ type Player struct {
 	MovesLeft int
 	Rules     string
 	Map       [][]byte
+}
+
+type Teleporter struct {
+	Position    Pos
+	ExitFacing  []int // corner nodes share node, so we need a shared teleporter for them
+	TeleportsTo *Teleporter
 }
 
 /*
@@ -57,13 +86,13 @@ func (p *Player) PrintMap(areaSize *int) {
 			if xIdx == p.PositionX && yIdx == p.PositionY {
 				switch p.Facing {
 				case 0:
-					fmt.Print("*")
+					fmt.Print(">")
 				case 1:
-					fmt.Print("*")
+					fmt.Print("v")
 				case 2:
-					fmt.Print("*")
+					fmt.Print("<")
 				case 3:
-					fmt.Print("*")
+					fmt.Print("^")
 				}
 			} else {
 				fmt.Print(string(char))
@@ -132,11 +161,11 @@ If we have a heading and moves left, we move the player until we are out of move
 Then we pop a new rule, set the heading in relation to our current heading and set the moves left.
 If we hit a '#' we stop moving and pop a new rule.
 */
-func (p *Player) DoMoves() {
+func (p *Player) DoMoves(cubeRules *[]Rule) {
 	for {
 		if p.MovesLeft == 0 {
 			rule := p.PopRule()
-			fmt.Println("popped rule:", rule)
+			//fmt.Println("popped rule:", rule)
 			if rule == "" {
 				return
 			}
@@ -152,9 +181,6 @@ func (p *Player) DoMoves() {
 				}
 			}
 		}
-		//areaSize := 100
-		//p.PrintMap(&areaSize)
-
 	forLoop1:
 		for {
 			if p.MovesLeft == 0 {
@@ -164,7 +190,7 @@ func (p *Player) DoMoves() {
 			savedPositionX := p.PositionX
 			savedPositionY := p.PositionY
 
-			fmt.Println("MOVE FROM p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft)
+			//fmt.Println("MOVE FROM p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft)
 			var vector Vector
 			switch p.Facing {
 			case 0:
@@ -185,7 +211,7 @@ func (p *Player) DoMoves() {
 
 			// check where we ended up
 			currentTile := p.Map[p.PositionY][p.PositionX]
-			fmt.Println("MOVED TO currentTile:", string(currentTile))
+			//fmt.Println("MOVED TO currentTile:", string(currentTile))
 			switch currentTile {
 			case '.':
 				// good move, just decrement moves left
@@ -196,50 +222,194 @@ func (p *Player) DoMoves() {
 				p.PositionX = savedPositionX
 				p.PositionY = savedPositionY
 				p.MovesLeft = 0
-				fmt.Println("REVERTING TO p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft)
+				//fmt.Println("REVERTING TO p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft)
 				break forLoop1
 			case ' ':
-				fmt.Println("WRAPPING AROUND")
-				// wrap around the map, unless we wrap around to '#'
-				// we need to find the next non-' ' tile to determine the success of the move
-				wrappingAround := currentTile == ' '
-				if wrappingAround {
-					// move to opposite side of the map
-					switch p.Facing {
-					case 0:
-						p.PositionX = 0
-					case 1:
-						p.PositionY = 0
-					case 2:
-						p.PositionX = len(p.Map[0]) - 1
-					case 3:
-						p.PositionY = len(p.Map) - 1
-					}
+				// part1
+				if cubeRules == nil {
+					//fmt.Println("WRAPPING AROUND")
+					// wrap around the map, unless we wrap around to '#'
+					// we need to find the next non-' ' tile to determine the success of the move
+					wrappingAround := currentTile == ' '
+					if wrappingAround {
+						// move to opposite side of the map
+						switch p.Facing {
+						case 0:
+							p.PositionX = 0
+						case 1:
+							p.PositionY = 0
+						case 2:
+							p.PositionX = len(p.Map[0]) - 1
+						case 3:
+							p.PositionY = len(p.Map) - 1
+						}
 
-					for {
-						// check where we ended up
-						currentTile = p.Map[p.PositionY][p.PositionX]
-						fmt.Println("in small loop:", "p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft, "currentTile:", string(currentTile), currentTile)
-						switch currentTile {
-						case '.':
-							fmt.Println("WRAPPED AROUND TO '.'")
-							// good move, just decrement moves left
-							p.MovesLeft--
-							break forLoop1
-						case '#':
-							// bad move, revert and pop a new rule
-							p.PositionX = savedPositionX
-							p.PositionY = savedPositionY
-							p.MovesLeft = 0
-							break forLoop1
-						case ' ':
-							p.ApplyMovementVector(vector)
-							// keep going
-							continue
+						for {
+							// check where we ended up
+							currentTile = p.Map[p.PositionY][p.PositionX]
+							//fmt.Println("in small loop:", "p.PositionX:", p.PositionX, "p.PositionY:", p.PositionY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft, "currentTile:", string(currentTile), currentTile)
+							switch currentTile {
+							case '.':
+								//fmt.Println("WRAPPED AROUND TO '.'")
+								// good move, just decrement moves left
+								p.MovesLeft--
+								break forLoop1
+							case '#':
+								// bad move, revert and pop a new rule
+								p.PositionX = savedPositionX
+								p.PositionY = savedPositionY
+								p.MovesLeft = 0
+								break forLoop1
+							case ' ':
+								p.ApplyMovementVector(vector)
+								// keep going
+								continue
+							}
 						}
 					}
-				}
+				} else {
+					// part2
 
+					// part 2 requires us to stand on originating block
+					switch p.Facing {
+					case 0:
+						p.PositionX -= 1
+					case 1:
+						p.PositionY -= 1
+					case 2:
+						p.PositionX += 1
+					case 3:
+						p.PositionY += 1
+					}
+					posX := p.PositionX - 1 // simplify our padding
+					posY := p.PositionY - 1 // simplify our padding
+
+					//time.Sleep(1 * time.Second)
+					currentTile = p.Map[p.PositionY][p.PositionX]
+					fmt.Println("BEFORE TELEPORT")
+					fmt.Println("MOVING FROM p.PositionX:", posX, "p.PositionY:", posY, "p.Facing:", p.Facing, "p.MovesLeft:", p.MovesLeft, currentTile)
+					areaSize := 30
+					p.PrintMap(&areaSize)
+
+					myOrigCubeX := (savedPositionX - 1) / 50
+					myOrigCubeY := (savedPositionY - 1) / 50
+					origCubeIdx := (myOrigCubeY * 3) + myOrigCubeX // 3 squares in a row
+					fmt.Println("Part2 Teleport! from cube:", origCubeIdx)
+					newExitFacing := 0
+					for ruleIdx := range *cubeRules {
+						rule := &(*cubeRules)[ruleIdx]
+						if rule.FromCubeIdx != origCubeIdx {
+							continue
+						}
+						if p.Facing != rule.EntryFacing {
+							continue
+						}
+						fmt.Println("rule of interest:", rule)
+						exitTopX := (rule.ToCubeIdx % 3 * 50)
+						exitTopY := (rule.ToCubeIdx / 3 * 50)
+						fmt.Println("from cube Idx:", rule.FromCubeIdx, "to cube Idx:", rule.ToCubeIdx)
+						fmt.Println("exitTopX:", exitTopX, "exitTopY:", exitTopY)
+						switch rule.EntryFacing { // enter right
+						case 0:
+							switch rule.ExitFacing {
+							case 2: // exit left (WORKS)
+								posX = exitTopX + 49
+								posY = exitTopY + (49 - ((posY) % 50))
+							case 3: // exit up (WORKS)
+								posX = exitTopX + ((posY) % 50)
+								posY = exitTopY + 49
+							default:
+								panic("unknown exit facing")
+							}
+						case 1: // enter down
+							switch rule.ExitFacing {
+							case 1: // exit down (WORKS)
+								posX = exitTopX + (posX % 50)
+								posY = exitTopY
+							case 2: // exit left (WORKS)
+								posY = exitTopY + (posX % 50)
+								posX = exitTopX + 49
+							default:
+								panic("unknown exit facing")
+							}
+						case 2: // enter left
+							switch rule.ExitFacing {
+							case 0: // exit right (WORKS)
+								posX = exitTopX
+								posY = exitTopY + 49 - ((posY) % 50)
+							case 1: // exit down (WORDS)
+								posX = exitTopX + (posY % 50)
+								posY = exitTopY
+							default:
+								panic("unknown exit facing")
+							}
+						case 3: // enter up
+							switch rule.ExitFacing {
+							case 0: // exit right
+								posY = exitTopY + (posX % 50)
+								posX = exitTopX
+							case 3: // exit up
+								posX = exitTopX + (posX % 50)
+								posY = exitTopY + 49
+							default:
+								panic("unknown exit facing")
+							}
+						}
+						newExitFacing = rule.ExitFacing
+						break
+					}
+
+					areaSize = 15
+
+					p.PositionX = posX + 1
+					p.PositionY = posY + 1
+
+					currentTile = p.Map[p.PositionY][p.PositionX]
+					if currentTile == '#' {
+						p.MovesLeft = 0
+						p.PositionX = savedPositionX
+						p.PositionY = savedPositionY
+						break forLoop1
+					}
+					fmt.Println("Setting new facing to:", newExitFacing, "from:", p.Facing)
+					p.Facing = newExitFacing
+					p.MovesLeft--
+					p.PrintMap(&areaSize)
+
+					if currentTile != '.' {
+						fmt.Println("currentTile:", currentTile, "at", posX, posY)
+						panic("jump to emptiness")
+					}
+					// use striing formatting
+					switch p.Facing {
+					case 0:
+						tileToCheck := p.Map[p.PositionY][p.PositionX-1]
+						if tileToCheck != ' ' {
+							badLandingMsg := fmt.Sprintf("bad landing on %c", tileToCheck)
+							panic(badLandingMsg)
+						}
+						// cases 1-3
+					case 1:
+						tileToCheck := p.Map[p.PositionY-1][p.PositionX]
+						if tileToCheck != ' ' {
+							badLandingMsg := fmt.Sprintf("bad landing on %c", tileToCheck)
+							panic(badLandingMsg)
+						}
+					case 2:
+						tileToCheck := p.Map[p.PositionY][p.PositionX+1]
+						if tileToCheck != ' ' {
+							badLandingMsg := fmt.Sprintf("bad landing on %c", tileToCheck)
+							panic(badLandingMsg)
+						}
+					case 3:
+						tileToCheck := p.Map[p.PositionY+1][p.PositionX]
+						if tileToCheck != ' ' {
+							badLandingMsg := fmt.Sprintf("bad landing on %c", tileToCheck)
+							panic(badLandingMsg)
+						}
+					}
+					fmt.Println("\n\n\n=============================\n\n\n")
+				}
 			}
 		}
 	}
@@ -307,6 +477,30 @@ func ParseData(input string) (area [][]byte, rules string) {
 }
 
 /*
+Making it solve the cube is too much work, i'll just create the teleporters
+manually. :'(
+*/
+func HackyCheat() []Rule {
+	rules := []Rule{
+		{1, 3, 9, 0}, // green 1
+		{9, 2, 1, 1}, // green 2
+		{2, 3, 9, 3}, // pink 1
+		{9, 1, 2, 1}, // pink 2 +
+		{1, 2, 6, 0}, // yellow1
+		{6, 2, 1, 0}, // yellow 2
+		{2, 0, 7, 2}, // purple1
+		{7, 0, 2, 2}, // purple 2 +
+		{4, 2, 6, 1}, // teal 1
+		{6, 3, 4, 0}, // teal 2
+		{7, 1, 9, 2}, // orange 1
+		{9, 0, 7, 3}, // orange 2
+		{2, 1, 4, 2}, // blue1
+		{4, 0, 2, 3}, // blue2
+	}
+	return rules
+}
+
+/*
 Main
 102221
 */
@@ -329,9 +523,25 @@ func main() {
 	player.MoveToStartingPosition()
 	fmt.Println("START player.PositionX:", player.PositionX, "player.PositionY:", player.PositionY, "player.Facing:", player.Facing, "player.MovesLeft:", player.MovesLeft)
 
-	player.DoMoves()
+	player.DoMoves(nil)
 	fmt.Println("FINAL OUTCOME")
 	player.PrintMap(nil)
 	score := player.GetScore()
 	fmt.Println("Part1:", score)
+
+	// Part 2
+	player = Player{
+		PositionX: 0, // needs to be found
+		PositionY: 0, // needs to be found
+		Facing:    0, // heading 0 is right
+		MovesLeft: 0,
+		Rules:     rules,
+		Map:       area,
+	}
+	// find player starting position
+	player.MoveToStartingPosition()
+	hackyRules := HackyCheat()
+	player.DoMoves(&hackyRules)
+	score2 := player.GetScore()
+	fmt.Println("Part2:", score2)
 }
